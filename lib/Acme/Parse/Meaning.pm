@@ -5,6 +5,11 @@ use Moo;
 use Marpa::R2;
 use feature 'say';
 use Data::Dumper::Concise;
+use Log::Contextual qw[ :log :dlog set_logger ];
+use Log::Contextual::SimpleLogger;
+set_logger(Log::Contextual::SimpleLogger->new(
+    { levels => [qw/warn debug/] } ));
+
 
 has text => (
     is => 'ro',
@@ -20,11 +25,11 @@ sub _build_grammar {
 :start              ::= document
 document            ::= paragraph+
 paragraph           ::= sentence+
-sentence            ::= sentence_part+
-sentence_part       ::=  words  action => add_word
+sentence            ::= sentence_part+ action => dump_sentence
+sentence_part       ::=  words 
 words               ::= word_and_space+
 word_and_space      ::= opt_whitespace word opt_whitespace 
-word                ~ letters
+word                ::= letters action => add_word
 letters             ~ letter+
 letter              ~ [\w]
 opt_whitespace      ::= [\h]*
@@ -70,7 +75,7 @@ sentence part     ::= word+ | proper-noun | opt-punctuation
 
 sub parse {
     my $self = shift;
-    warn 'before recce';
+    log_debug { 'before recce' };
     my $recce = Marpa::R2::Scanless::R->new( { grammar => $self->grammar, trace_terminals => 1 } );
     warn 'after recce';
     my $content = $self->text;
@@ -79,14 +84,24 @@ sub parse {
 #    warn $self->grammar->show_rules;
     $recce->read( \$content );
     my $value_ref = $recce->value;
+    warn Dumper "value:" , $value_ref;
     my $value = $value_ref ? ${$value_ref} : 'No Parse';
 }
 
-sub MeaningNodes::new { +{} }
+sub MeaningNodes::first {
+    Dlog_debug { "MeaningNodes::first: $_" } \@_;
+}
+sub MeaningNodes::new {
+    +{ words => [] }
+}
 sub MeaningNodes::add_word {
     my($self,$word) = @_;
-    say Dumper \@_;
+    push( @{$self->{words}}, $word );
     return $word;
+}
+
+sub MeaningNodes::dump_sentence {
+    Dlog_debug { "MeaningNodes::dump_sentence: $_" } \@_;
 }
 
 1;

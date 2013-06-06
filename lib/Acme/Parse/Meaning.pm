@@ -25,26 +25,29 @@ sub _build_grammar {
 :start              ::= document
 document            ::= paragraph+
 paragraph           ::= sentence+
-sentence            ::= sentence_part+ action => dump_sentence
-sentence_part       ::=  words 
-words               ::= word_and_space+
-word_and_space      ::= opt_whitespace word opt_whitespace 
-word                ::= letters action => add_word
-letters             ~ letter+
-letter              ~ [\w]
+sentence            ::= sentence_parts '.'  action => dump_sentence
+sentence_parts      ::= sentence_part+
+sentence_part       ::= words
+words               ::= word_and_space+ 
+word_and_space      ::= opt_whitespace word opt_whitespace action => add_word
+word                ::= letters action => ::first
+letters             ~   letter+
+letter              ~   [\w] | [']
 opt_whitespace      ::= [\h]*
 EOS
+#word                ::= letters action => add_word
 
     return Marpa::R2::Scanless::G->new(
         {
             source         => \$source,
             action_object  => 'MeaningNodes',
-            default_action => '::first',
+            default_action => '::array',
         } );
     return $source;
 }
 
 =head2 BUsted
+words               ::= word_and_space+ action => collect_word_and_space
 proper_noun         ~ [\b\w+\b]
 sentence_part       ::= word+ | proper_noun
 capitalized-word  ::= WORD_BORDER UPPER_CASE_LETTER LOWER_CASE_LETTER+ WORD_BORDER | PUNCTUATION_MARK
@@ -84,24 +87,38 @@ sub parse {
 #    warn $self->grammar->show_rules;
     $recce->read( \$content );
     my $value_ref = $recce->value;
-    warn Dumper "value:" , $value_ref;
+    Dlog_debug { "value:$_" } $value_ref;
     my $value = $value_ref ? ${$value_ref} : 'No Parse';
 }
 
-sub MeaningNodes::first {
-    Dlog_debug { "MeaningNodes::first: $_" } \@_;
-}
 sub MeaningNodes::new {
     +{ words => [] }
 }
 sub MeaningNodes::add_word {
-    my($self,$word) = @_;
-    push( @{$self->{words}}, $word );
-    return $word;
+    my($self,undef,$word,undef) = @_;
+    Dlog_debug { "MeaningNodes::add_word $_" } \@_;
+#    push( @{$self->{words}}, $word );
+    return \$word;#$self->{words};
 }
 
 sub MeaningNodes::dump_sentence {
     Dlog_debug { "MeaningNodes::dump_sentence: $_" } \@_;
+    return \@_;
+}
+
+sub MeaningNodes::dump_sentence_part {
+    Dlog_debug { "MeaningNodes::dump_sentence_part $_" } \@_;
+}
+
+sub MeaningNodes::collect_word_and_space {
+    Dlog_debug { "MeaningNodes::collect_word_and_space $_" } \@_;
+}
+
+sub MeaningNodes::identity {
+    shift;
+    Dlog_debug { "MeaningNodes::identity: $_" } @_;
+    return unless @_;
+    return \@_;
 }
 
 1;

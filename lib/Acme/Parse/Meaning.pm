@@ -16,26 +16,39 @@ has text => (
     required => 1,
 );
 
+has scrubbed_text => ( is => 'lazy' );
+
 has grammar => ( is => 'lazy' );
 
 has proper_nouns => ( is => 'lazy' );
 
+sub _build_scrubbed_text {
+    my $self = shift;
+    my $text = $self->text;
+    $text =~ s/'//gm;
+    return " $text";
+}
 sub _build_grammar {
     my $source =<<'EOS';
+:discard            ~  Apostrophe
+:discard            ~  WhiteSpace
 :start              ::= document
 document            ::= paragraph+
 paragraph           ::= sentence+
-sentence            ::= sentence_parts '.'  action => dump_sentence
+sentence            ::= sentence_parts SentenceEnd  action => dump_sentence
 sentence_parts      ::= sentence_part+
-sentence_part       ::= words
-words               ::= word_and_space+ 
-word_and_space      ::= opt_whitespace word opt_whitespace action => add_word
-word                ::= letters action => ::first
-letters             ~   letter+
-letter              ~   [\w] | [']
-opt_whitespace      ::= [\h]*
+sentence_part       ::= words action => ::first
+words               ~ word+ 
+word                ::= action => add_word
+word                ~ letter+ 
+SentenceEnd         ~ '.'
+letter              ~ UppercaseLetter | LowercaseLetter
+UppercaseLetter     ~   [\p{Uppercase_Letter}]
+LowercaseLetter     ~   [\p{Lowercase_Letter}]
+Apostrophe          ~   [']
+WhiteSpace          ~ [\h]*
+
 EOS
-#word                ::= letters action => add_word
 
     return Marpa::R2::Scanless::G->new(
         {
@@ -81,7 +94,7 @@ sub parse {
     log_debug { 'before recce' };
     my $recce = Marpa::R2::Scanless::R->new( { grammar => $self->grammar, trace_terminals => 1 } );
     warn 'after recce';
-    my $content = $self->text;
+    my $content = $self->scrubbed_text;
     warn "trying to parse '$content'";
 #    warn $self->grammar->show_symbols;
 #    warn $self->grammar->show_rules;
@@ -90,6 +103,7 @@ sub parse {
     Dlog_debug { "value:$_" } $value_ref;
     my $value = $value_ref ? ${$value_ref} : 'No Parse';
 }
+
 
 sub MeaningNodes::new {
     +{ words => [] }
@@ -102,7 +116,8 @@ sub MeaningNodes::add_word {
 }
 
 sub MeaningNodes::dump_sentence {
-    Dlog_debug { "MeaningNodes::dump_sentence: $_" } \@_;
+    my($self,$sentence, undef) = @_; # SentenceEnd
+    return $sentence;
     return \@_;
 }
 
@@ -119,6 +134,12 @@ sub MeaningNodes::identity {
     Dlog_debug { "MeaningNodes::identity: $_" } @_;
     return unless @_;
     return \@_;
+}
+
+sub MeaningNodes::parse_document {
+    my( $self, $document ) = @_;
+    Dlog_debug { "parse_document $_" } $document;
+    return $document;
 }
 
 1;

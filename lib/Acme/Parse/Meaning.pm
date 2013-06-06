@@ -4,6 +4,7 @@ use warnings FATAL => 'all';
 use Moo;
 use Marpa::R2;
 use feature 'say';
+use Data::Dumper::Concise;
 
 has text => (
     is => 'ro',
@@ -20,15 +21,26 @@ sub _build_grammar {
 document            ::= paragraph+
 paragraph           ::= sentence+
 sentence            ::= sentence_part+
-sentence_part       ::=   words | proper_noun
-words ::= words_and_space+
-words_and_space ::= word opt_whitespace 
-opt_whitespace ~ [\h]+
-word                 ~ [\b\w+\b]
-proper_noun       ~ [\b\w+\w]
+sentence_part       ::=  words  action => add_word
+words               ::= word_and_space+
+word_and_space      ::= opt_whitespace word opt_whitespace 
+word                ~ letters
+letters             ~ letter+
+letter              ~ [\w]
+opt_whitespace      ::= [\h]*
 EOS
 
+    return Marpa::R2::Scanless::G->new(
+        {
+            source         => \$source,
+            action_object  => 'MeaningNodes',
+            default_action => '::first',
+        } );
+    return $source;
+}
+
 =head2 BUsted
+proper_noun         ~ [\b\w+\b]
 sentence_part       ::= word+ | proper_noun
 capitalized-word  ::= WORD_BORDER UPPER_CASE_LETTER LOWER_CASE_LETTER+ WORD_BORDER | PUNCTUATION_MARK
 :start ::= Expression
@@ -56,32 +68,25 @@ sentence part     ::= word+ | proper-noun | opt-punctuation
 
 =cut
 
-      return Marpa::R2::Scanless::G->new({
-        source         => \$source,
-        action_object  => 'MeaningNodes',
-        default_action => '::first',
-    });
-    return $source;
-}
 sub parse {
     my $self = shift;
     warn 'before recce';
-    my $recce = Marpa::R2::Scanless::R->new( { grammar => $self->grammar } );
+    my $recce = Marpa::R2::Scanless::R->new( { grammar => $self->grammar, trace_terminals => 1 } );
     warn 'after recce';
     my $content = $self->text;
     warn "trying to parse '$content'";
+#    warn $self->grammar->show_symbols;
+#    warn $self->grammar->show_rules;
     $recce->read( \$content );
     my $value_ref = $recce->value;
     my $value = $value_ref ? ${$value_ref} : 'No Parse';
 }
 
 sub MeaningNodes::new { +{} }
-sub MeaningNodes::do_add {
-    return @_;
-}
-
-sub MeaningNodes::do_multiply {
-    return @_;
+sub MeaningNodes::add_word {
+    my($self,$word) = @_;
+    say Dumper \@_;
+    return $word;
 }
 
 1;
